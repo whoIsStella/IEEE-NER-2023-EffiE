@@ -9,9 +9,10 @@
     Date: Summer 2022
 """
 from dataset import *
-from model import *
+from model import get_model, create_finetune, train_model, plot_logs
 import config
 import tensorflow as tf
+
 
 
 
@@ -66,9 +67,9 @@ if __name__ == "__main__":
         filters=config.filters,
         neurons=config.neurons,
         dropout=config.dropout,
-        kernel_size=config.k_size,
-        input_shape=config.in_shape,
-        pool_size=config.p_kernel
+        kernel_size=config.kernal_size,
+        input_shape=config.input_shape,
+        pool_size=config.pool_size
     )
     
     # Start training (And saving weights along training)
@@ -78,37 +79,37 @@ if __name__ == "__main__":
         patience=config.patience, lr=config.inital_lr
     )
     
-    # # Visualize accuarcy and loss logs
-    # plot_logs(history, acc=True, save_path=config.acc_log)
-    # plot_logs(history, acc=False, save_path=config.loss_log)
+    # Visualize accuarcy and loss logs
+    plot_logs(history, acc=True, save_path=config.acc_log)
+    plot_logs(history, acc=False, save_path=config.loss_log)
     
-    # # Load pretrained model
-    # model = get_model(
-    #     num_classes=config.num_classes,
-    #     filters=config.filters,
-    #     neurons=config.neurons,
-    #     dropout=config.dropout
-    # )
-    # model.load_weights(config.save_path)
+    # Load pretrained model
+    model = get_model(
+        num_classes=config.num_classes,
+        filters=config.filters,
+        neurons=config.neurons,
+        dropout=config.dropout
+    )
+    model.load_weights(config.save_path)
     
-    # # NOTE: Optional test for loaded model's performance
-    # model.compile(
-    #         optimizer=tf.keras.optimizers.Adam(learning_rate=0.2),
-    #         loss='sparse_categorical_crossentropy',
-    #         metrics=['accuracy'],
-    #     )
-    # # See if weights were the same
-    # model.evaluate(X_test, y_test)
+    # NOTE: Optional test for loaded model's performance
+    model.compile(
+            optimizer=tf.keras.optimizers.Adam(learning_rate=0.2),
+            loss='sparse_categorical_crossentropy',
+            metrics=['accuracy'],
+        )
+    # See if weights were the same
+    model.evaluate(X_test, y_test)
     
     # # Test with finetune model. (last classifier block removed from base model)
     # finetune_model = get_finetune(config.save_path, config.prev_params, num_classes=config.num_classes)
     # print("finetune model loaded!")
     
     # NOTE: You can load finetune model like this too.
-    # finetune_model = create_finetune(model, num_classes=4)
-    # finetune_model.compile(
-    #     optimizer=tf.keras.optimizers.Adam(learning_rate=0.2),
-    #     loss='sparse_categorical_crossentropy',
-    #     metrics=['accuracy'],
-    # )
-    # finetune_model.evaluate(X_test, y_test)
+    finetune_model = create_finetune(model, num_classes=4)
+    finetune_model.compile(
+        optimizer=tf.keras.optimizers.Adam(learning_rate=0.2),
+        loss='sparse_categorical_crossentropy',
+        metrics=['accuracy'],
+    )
+    finetune_model.evaluate(X_test, y_test)

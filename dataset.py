@@ -12,39 +12,39 @@ import os
 
 
 def folder_extract(root_dir, exercises=["E2"], myo_pref="elbow"):
-    """
-    Purpose:
-        Extract sEMG signals data from files beneath folder 'root_dir'(from args)
+    # """
+    # Purpose:
+    #     Extract sEMG signals data from files beneath folder 'root_dir'(from args)
 
-    Args:
-        1. root_dir (str):
-            Root directory of the Ninapro DB5. (With folders and files storing sEMG data underneath)
+    # Args:
+    #     1. root_dir (str):
+    #         Root directory of the Ninapro DB5. (With folders and files storing sEMG data underneath)
         
-        2. exercises (1D list, optional):
-            Exercises with dedicated gestures stored. Defaults to "E2".
-            - Note:
-                "E3" may match to file: Ninapro_DB5\s2\S2_E3_A1.mat
-                "E2" may match to file: Ninapro_DB5\s2\S2_E2_A1.mat
-                "E1" may match to file: Ninapro_DB5\s2\S2_E1_A1.mat
-            - Example:
-                ["E3", "E2"] as args collects sample from both exercise 3 and 2.
+    #     2. exercises (1D list, optional):
+    #         Exercises with dedicated gestures stored. Defaults to "E2".
+    #         - Note:
+    #             "E3" may match to file: Ninapro_DB5\s2\S2_E3_A1.mat
+    #             "E2" may match to file: Ninapro_DB5\s2\S2_E2_A1.mat
+    #             "E1" may match to file: Ninapro_DB5\s2\S2_E1_A1.mat
+    #         - Example:
+    #             ["E3", "E2"] as args collects sample from both exercise 3 and 2.
         
-        3. myo_pref (str, optional):
-            Ninapro DB5 data was collected via 2 Myo armband
-            - "elbow" collects sEMG from 1:8 channels, samples closest to elbow (From Myo Armband 1)
-            - "wrist" collects sEMG from 9:16 channels, samples closest to wrist (From Myo Armband 2)
+    #     3. myo_pref (str, optional):
+    #         Ninapro DB5 data was collected via 2 Myo armband
+    #         - "elbow" collects sEMG from 1:8 channels, samples closest to elbow (From Myo Armband 1)
+    #         - "wrist" collects sEMG from 9:16 channels, samples closest to wrist (From Myo Armband 2)
 
-            Defaults to "elbow".
+    #         Defaults to "elbow".
 
-    Returns:
-        1. (numpy.ndarray):
-            - Samples collected from "emg" column within each .mat files wihtin the folder 'root_dir'(from args)
-            - Shape: [num samples, 8(1 sEMG sample from each 8 Myo sensors/channels)]
+    # Returns:
+    #     1. (numpy.ndarray):
+    #         - Samples collected from "emg" column within each .mat files wihtin the folder 'root_dir'(from args)
+    #         - Shape: [num samples, 8(1 sEMG sample from each 8 Myo sensors/channels)]
             
-        2. (numpy.ndarray): _description_
-            - Targets/labels collected from "stimulus" column within each .mat files wihtin the folder 'root_dir'(from args)
-            - Shape: [num samples]
-    """
+    #     2. (numpy.ndarray): _description_
+    #         - Targets/labels collected from "stimulus" column within each .mat files wihtin the folder 'root_dir'(from args)
+    #         - Shape: [num samples]
+    # """
     
     emg = []
     emg_label = []
