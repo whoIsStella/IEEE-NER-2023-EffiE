@@ -6,7 +6,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 import json
-import scipy.io
+from scipy.io import loadmat
 import random
 import os
 
@@ -58,7 +58,7 @@ def folder_extract(root_dir, exercises=["E2"], myo_pref="elbow"):
             if file.split("_")[1] in exercises:
                 file_path = subfolder_dir + "/" + file
                 # Read .mat file
-                mat = scipy.io.loadmat(file_path)
+                mat = loadmat(file_path)
                 
                 # Get first 8 Myo sensors/channels closest to elbow
                 if myo_pref == "elbow":

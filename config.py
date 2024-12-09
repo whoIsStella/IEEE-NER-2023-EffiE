@@ -4,19 +4,19 @@
     Date: Summer 2022
 """
 # How many samples each sEMG image channel contains.
-window = 32
+window = 52 #32
 
 # Sliding step (for overlapping)
 step = 16
 
 # Kernel size for CNN
-kernel_size = (5, 3) #(3, 3 )
+kernel_size = (3, 3) #(5, 3) #(3, 3 )
 
 # Input shape for CNN
 input_shape = (1, 8, 52)
 
 # Pool kernel for CNN maxpooling
-pool_size = (1, 2)
+pool_size =  (1, 1) #(1, 1) (3, 1)
 
 # Exercises with dedicated gestures stored
 exercises = ["E2"]
