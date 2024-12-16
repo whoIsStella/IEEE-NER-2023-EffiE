@@ -58,7 +58,7 @@ patience = 50
 inital_lr = 0.2
 
 # Number of training epochs for the finetune-base model.
-epochs = 200
+epochs = 500
 
 # Batch size for training the finetune-base model.
 batch_size = 384

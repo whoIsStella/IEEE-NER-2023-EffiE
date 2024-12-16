@@ -9,11 +9,21 @@
     Date: Summer 2022
 """
 import torch
+import torch.nn as nn
 from dataset import *
 from model import get_model, create_finetune, train_model, plot_logs, create_dataloaders
 import config
 
-
+def initialize_weights(model):
+    for model in model.modules():
+        if isinstance(model, nn.Conv2d):
+            nn.init.kaiming_normal_(model.weight, mode='fan_out', nonlinearity='relu')
+            if model.bias is not None:
+                nn.init.constant_(model.bias, 0)
+        elif isinstance(model, nn.Linear):
+            nn.init.xavier_normal_(model.weight)
+            nn.init.constant_(model.bias, 0)
+                
 if __name__ == "__main__":
     # NOTE: Check if Utilizing GPU device
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -59,7 +69,7 @@ if __name__ == "__main__":
     print("y_test:", y_test.shape)
     print("Data Type of Inputs:\n")
     print("X_train:", X_train.dtype)
-    print("_test:", X_test.dtype)
+    print("X_test:", X_test.dtype)
     print("\n")
     
     # Create dataloaders
@@ -76,6 +86,7 @@ if __name__ == "__main__":
     )
     
     #Define optimizer and loss function (criterion)
+    config.inital_lr = 1e-3
     optimizer = torch.optim.Adam(cnn.parameters(), lr=config.inital_lr)
     criterion = torch.nn.CrossEntropyLoss()
     
@@ -84,8 +95,9 @@ if __name__ == "__main__":
     cnn, training_losses, validation_losses = train_model(
         cnn, train_loader, val_loader, optimizer, criterion,
         save_path=config.save_path, epochs=config.epochs,
-        patience=config.patience, lr=config.inital_lr, device=device
+        patience=config.patience, decay_rate=0.1, device=device
     )
+    #lr=config.inital_lr,
     
     # Visualize accuarcy and loss logs
     # plot_logs(train_acc, acc=True, save_path=config.acc_log)
@@ -97,7 +109,7 @@ if __name__ == "__main__":
         filters=config.filters,
         neurons=config.neurons,
         dropout=config.dropout,
-        kernel_size=config.kernal_size,
+        kernel_size=config.kernel_size,
         input_shape=config.input_shape,
         pool_size=config.pool_size
     )

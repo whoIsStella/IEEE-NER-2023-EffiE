@@ -31,7 +31,7 @@ class Model(nn.Module):
         dropout=0.5,
         kernel_size=(3, 3), 
         input_shape=(1, 8, 52), 
-        pool_size=(1, 1)
+        pool_size=(2, 2)
     ):
         super(Model, self).__init__()
         logger.info("Initializing Model")
@@ -48,8 +48,10 @@ class Model(nn.Module):
         self.conv_layer1 = nn.Conv2d(
             in_channels=input_shape[0],
             out_channels=filters[0],
-            kernel_size=kernel_size
+            kernel_size=kernel_size,
+            padding=1 # Padding to maintain spatial dimensions
         )
+        self.bn1 = nn.BatchNorm2d(filters[0])
         self.relu1 = nn.ReLU()
         self.pool1 = nn.MaxPool2d(kernel_size=pool_size)
 
@@ -57,17 +59,19 @@ class Model(nn.Module):
         self.conv_layer2 = nn.Conv2d(
             in_channels=filters[0],
             out_channels=filters[1],
-            kernel_size=kernel_size
+            kernel_size=kernel_size,
+            padding=1 # Padding to maintain spatial dimensions
         )
+        self.bn2 = nn.BatchNorm2d(filters[1])
         self.relu2 = nn.ReLU()
         self.pool2 = nn.MaxPool2d(kernel_size=pool_size)
 
         # Calculating the output dimensions after convolution and pooling
         with torch.no_grad():
             test_input = torch.zeros(1, *input_shape)
-            x = self.relu1(self.conv_layer1(test_input))
+            x = self.relu1(self.bn1(self.conv_layer1(test_input)))
             x = self.pool1(x)
-            x = self.relu2(self.conv_layer2(x))
+            x = self.relu2(self.bn2(self.conv_layer2(x)))
             x = self.pool2(x)
             self.flattened_size = x.numel()
             logger.info(f"Flattened size: {self.flattened_size}")
@@ -85,15 +89,11 @@ class Model(nn.Module):
 
     def forward(self, x):
         # Forward pass
-        x = self.relu1(self.conv_layer1(x))
-        x = self.pool1(x)
-        x = self.relu2(self.conv_layer2(x))
-        x = self.pool2(x)
+        x = self.pool1(self.relu1(self.bn1(self.conv_layer1(x))))
+        x = self.pool2(self.relu2(self.bn2(self.conv_layer2(x))))
         x = x.view(-1, self.flattened_size)
-        x = self.relu3(self.fc1(x))
-        x = self.dropout1(x)
-        x = self.relu4(self.fc2(x))
-        x = self.dropout2(x)
+        x = self.dropout1(self.relu3(self.fc1(x)))
+        x = self.dropout2(self.relu4(self.fc2(x)))
         x = self.fc3(x)
         return x  # No softmax at this point
 
@@ -116,7 +116,7 @@ def get_model(
     dropout=0.5,
     kernel_size=(3, 3), 
     input_shape=(1, 8, 52), 
-    pool_size=(1, 1)
+    pool_size=(2, 2)
 ):
     model = Model(
         num_classes=num_classes, 
@@ -136,6 +136,8 @@ def get_model(
         prev_params (list): List of previous model parameters.
     Returns: The new pretrained model with loaded weights
     '''
+    
+
 
 def get_pretrained(path, prev_params):
     base_model = get_model(
@@ -185,10 +187,12 @@ def train_model(
     optimizer,
     criterion,
     save_path=None,
-    epochs=200,
+    epochs=500,
     patience=80,
-    lr=0.2,
-    decay_rate=0.9,
+    step_size=50, #for StepLR
+    gamma=0.1,  #decay_rate
+    #lr=0.,    #0.2
+    # decay_rate=0.9,
     device='cuda'
 ):
     '''Trains model with early stopping and learning rate scheduling.
@@ -205,16 +209,22 @@ def train_model(
         decay_rate (float): Learning rate decay rate
         device (str, optional): Device to run the model on (cpu or cuda)'''
     best_loss = float('inf')
+    best_accuarcy = 0.0
     patience_counter = 0
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=decay_rate)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, step_size=step_size, gamma=gamma)
+    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
     model.to(device)
     
     training_losses = []
     validation_losses = []
+    training_accuracies = []
+    validation_accuracies = []
     
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
+        correct = 0
+        total = 0
         for inputs, labels in train_loader:
             inputs = inputs.to(device).float()
             labels = labels.to(device).long()
@@ -222,29 +232,51 @@ def train_model(
             outputs = model(inputs)
             loss = criterion(outputs, labels)
             loss.backward()
+            # Gradient clipping to prevent exploding gradients
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
             optimizer.step()
-            running_loss += loss.item() #* inputs.size(0)
+            running_loss += loss.item() * inputs.size(0)
+            
+            # Calculate training accuracy
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
         # scheduler.step()
         train_loss = running_loss / len(train_loader.dataset)
+        training_accuracies.append(100 * correct / total)
+        training_losses.append(train_loss)
+        training_accuracies.append(training_accuracies)
+        
     '''validation loss'''
     model.eval()
     val_loss = 0.0
+    correct = 0
+    total = 0
     with torch.no_grad():
         for inputs, labels in val_loader:
             inputs = inputs.to(device).float()
             labels = labels.to(device).long()
             outputs = model(inputs)
             loss = criterion(outputs, labels)
-            val_loss += loss.item() #* inputs.size(0)
+            val_loss += loss.item() * inputs.size(0)
             
-    val_loss /= len(val_loader)
-    training_losses.append(train_loss)
-    logger.info(f"Epoch {epoch+1}/{epochs} - Training Loss: {running_loss:.4f} - Validation Loss: {val_loss:.4f}")
+            # Calculate validation accuracy
+            _, predicted = torch.max(outputs.data, 1)
+            total += labels.size(0)
+            correct += (predicted == labels).sum().item()
+            
+    val_loss /= len(val_loader.dataset)
+    validation_losses.append(val_loss)
+    validation_accuracies.append(100 * correct / total)
+    validation_losses.append(val_loss)
+    validation_accuracies.append(validation_accuracies)
+    logger.info(f"Epoch {epoch+1}/{epochs} - Running Loss: {train_loss:.4f} - Train Acc: {training_accuracies:.4f} - Validation Loss: {val_loss:.4f} - Validation Acc: {validation_accuracies:.4f}")
     
     '''check for improvement'''
     #early stopping, saving best model
-    if val_loss < best_loss:
+    if val_loss < best_loss and validation_accuracies > best_accuarcy:
         best_loss = val_loss
+        best_accuarcy = validation_accuracies
         patience_counter = 0
         if save_path:
             torch.save(model.state_dict(), save_path)
@@ -255,12 +287,13 @@ def train_model(
         if patience_counter >= patience:
             logger.info(f"Early stopping triggered at epoch {epoch+1}")
             #return model
-        
+            
+            
         '''step scheduling'''
-        scheduler.step()
-    return model, training_losses, validation_losses
+        scheduler.step()  #scheduler.step(val_loss)
+    return model, training_losses, validation_losses, training_accuracies, validation_accuracies
 
-def plot_logs(training_losses, validation_losses, acc=False, save_path=None):
+def plot_logs(training_losses, validation_losses, training_accuracies, validation_accuracies, acc=False, save_path=None):
     '''Plots the training and validation logs.
     Args:
         training_losses (list): Training losses
