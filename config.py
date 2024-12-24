@@ -1,10 +1,10 @@
 """
     Description: Configuration Variables and Parameters
-    Author: Jimmy L. @ SF State MIC Lab
-    Date: Summer 2022
+    Author: Stella Parker @ SF State MIC Lab
+    Date: Started: October 2024 -Ongoing
 """
 # How many samples each sEMG image channel contains.
-window = 52 #32
+window = 32 #32
 
 # Sliding step (for overlapping)
 step = 16
@@ -13,10 +13,10 @@ step = 16
 kernel_size = (3, 3) #(5, 3) #(3, 3 )
 
 # Input shape for CNN
-input_shape = (1, 8, 52)
+input_shape = (8, window, 1) #(8, window, 1) (8, 32, 1)
 
 # Pool kernel for CNN maxpooling
-pool_size =  (1, 1) #(1, 1) (3, 1)
+pool_size =  (1, 2) #(1, 1) (3, 1)
 
 # Exercises with dedicated gestures stored
 exercises = ["E2"]
@@ -43,7 +43,7 @@ num_classes = len(targets) # 7
 filters = [48, 96]
 
 # Number of neurons for FFN the model contains.
-neurons = [512, 256] #None
+neurons = None #[512, 256]
 
 # Whether to use depthwise seperatble CNN to reduce computation and parameters
 seperable_cnn = False
@@ -58,7 +58,7 @@ patience = 50
 inital_lr = 0.2
 
 # Number of training epochs for the finetune-base model.
-epochs = 500
+epochs = 200
 
 # Batch size for training the finetune-base model.
 batch_size = 384

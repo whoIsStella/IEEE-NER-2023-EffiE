@@ -1,366 +1,388 @@
 """
-    Description: Code for A.I. model implementation and utility functions for it.
-    Author: Jimmy L. @ SF State MIC Lab
-    Date: Summer 2022
+Description: Code for A.I. model implementation and utility functions.
+Author: Stella Parker @ SF State MIC Lab
+Date: Started: October 2024 -Ongoing
 """
 
 import torch
 import torch.nn as nn
 import torch.optim as optim
-import logging
+import torch.nn.functional as F
+from torch.utils.data import Dataset, DataLoader
 import numpy as np
-from matplotlib import pyplot as plt
-from torch.utils.data import DataLoader, TensorDataset
-# tf.get_logger().setLevel('INFO')
+import matplotlib.pyplot as plt
+import copy
 
-# logging configuration
-logging.basicConfig(
-    level=logging.INFO,  # level of logging - INFO
-    format='%(asctime)s - %(levelname)s - %(message)s',  # define logging message format
-    datefmt='%m/%d/%Y %H:%M:%S'
-)
-logger = logging.getLogger(__name__)  # Create the 'logger' object, placeholder for logging module name
-
-# Defining the PyTorch model class
-class Model(nn.Module):
-    def __init__(
-        self, 
-        num_classes=4, 
-        filters=[32, 64], 
-        neurons=[512, 128], 
-        dropout=0.5,
-        kernel_size=(3, 3), 
-        input_shape=(1, 8, 52), 
-        pool_size=(2, 2)
-    ):
-        super(Model, self).__init__()
-        logger.info("Initializing Model")
-
-        self.num_classes = num_classes
-        self.filters = filters
-        self.neurons = neurons
-        self.dropout = dropout
-        self.kernel_size = kernel_size
-        self.input_shape = input_shape
-        self.pool_size = pool_size
-
-        # Defining convolutional layer 1
-        self.conv_layer1 = nn.Conv2d(
-            in_channels=input_shape[0],
-            out_channels=filters[0],
-            kernel_size=kernel_size,
-            padding=1 # Padding to maintain spatial dimensions
-        )
-        self.bn1 = nn.BatchNorm2d(filters[0])
-        self.relu1 = nn.ReLU()
-        self.pool1 = nn.MaxPool2d(kernel_size=pool_size)
-
-        # Defining convolutional layer 2
-        self.conv_layer2 = nn.Conv2d(
-            in_channels=filters[0],
-            out_channels=filters[1],
-            kernel_size=kernel_size,
-            padding=1 # Padding to maintain spatial dimensions
-        )
-        self.bn2 = nn.BatchNorm2d(filters[1])
-        self.relu2 = nn.ReLU()
-        self.pool2 = nn.MaxPool2d(kernel_size=pool_size)
-
-        # Calculating the output dimensions after convolution and pooling
-        with torch.no_grad():
-            test_input = torch.zeros(1, *input_shape)
-            x = self.relu1(self.bn1(self.conv_layer1(test_input)))
-            x = self.pool1(x)
-            x = self.relu2(self.bn2(self.conv_layer2(x)))
-            x = self.pool2(x)
-            self.flattened_size = x.numel()
-            logger.info(f"Flattened size: {self.flattened_size}")
-
-        # Fully connected layers
-        self.fc1 = nn.Linear(self.flattened_size, neurons[0])
-        self.relu3 = nn.ReLU()
-        self.dropout1 = nn.Dropout(dropout)
-
-        self.fc2 = nn.Linear(neurons[0], neurons[1])
-        self.relu4 = nn.ReLU()
-        self.dropout2 = nn.Dropout(dropout)
-
-        self.fc3 = nn.Linear(neurons[1], self.num_classes)
-
-    def forward(self, x):
-        # Forward pass
-        x = self.pool1(self.relu1(self.bn1(self.conv_layer1(x))))
-        x = self.pool2(self.relu2(self.bn2(self.conv_layer2(x))))
-        x = x.view(-1, self.flattened_size)
-        x = self.dropout1(self.relu3(self.fc1(x)))
-        x = self.dropout2(self.relu4(self.fc2(x)))
-        x = self.fc3(x)
-        return x  # No softmax at this point
-
-    '''
-    Initializes and returns the Model instance.
-    Args: 
-        num_classes (int): Number of classes to classify
-        filters (list): List of output filters for the CNN layers
-        neurons (list): List of neurons for the fully connected layers
-        dropout (float): Dropout rate
-        kernel_size (tuple): Kernel window size for the CNN
-        input_shape (tuple): Input shape for the CNN
-        pool_size (tuple): Pooling window size
-    '''
 
 def get_model(
-    num_classes=4, 
-    filters=[32, 64], 
-    neurons=[512, 128], 
+    num_classes=4,
+    filters=None,
+    neurons=None,
     dropout=0.5,
-    kernel_size=(3, 3), 
-    input_shape=(1, 8, 52), 
-    pool_size=(2, 2)
+    kernel_size=(5, 3),
+    input_shape=(52, 8, 1),
+    pool_size=(3, 1),
 ):
-    model = Model(
-        num_classes=num_classes, 
-        filters=filters, 
-        neurons=neurons, 
-        dropout=dropout,
-        kernel_size=kernel_size, 
-        input_shape=input_shape, 
-        pool_size=pool_size
-    )
+    """
+    Purpose:
+        Establish the architecture for the finetune-base A.I. model.
+
+    Args:
+        num_classes (int, optional): Number of classes/gestures to classify. Defaults to 4.
+        filters (list, optional): Output filters for the first and second 2D CNN. Defaults to None.
+        neurons (list, optional): Number of neurons for the first and second neural network. Defaults to None.
+        dropout (float, optional): Dropout rate. Defaults to 0.5.
+        kernel_size (tuple, optional): Kernel window size for CNN. Defaults to (5, 3).
+        input_shape (tuple, optional): Input shape for CNN. Defaults to (52, 8, 1).
+        pool_size (tuple, optional): Max pool size. Defaults to (3, 1).
+
+    Returns:
+        model (nn.Module): The finetune-base model.
+    """
+
+    if filters is None:
+        filters = [32, 64]
+
+    class FinetuneBaseModel(nn.Module):
+        def __init__(self, num_classes, filters, neurons, dropout, kernel_size, pool_size):
+            super(FinetuneBaseModel, self).__init__()
+            self.cnn1 = nn.Conv2d(
+                in_channels=1,
+                out_channels=filters[0],
+                kernel_size=kernel_size, #kernel_size, keep track of this
+                stride=1,
+            )
+            self.bn1 = nn.BatchNorm2d(filters[0])
+            self.prelu1 = nn.PReLU()
+            self.drop1 = nn.Dropout(p=dropout)
+            self.pool1 = nn.MaxPool2d(pool_size)
+
+            self.cnn2 = nn.Conv2d(
+                in_channels=filters[0],
+                out_channels=filters[1],
+                kernel_size=kernel_size,
+                stride=1,
+            )
+            self.bn2 = nn.BatchNorm2d(filters[1])
+            self.prelu2 = nn.PReLU()
+            self.drop2 = nn.Dropout(p=dropout)
+            self.pool2 = nn.MaxPool2d(pool_size)
+
+            self.neurons = neurons
+            self.flatten = nn.Flatten()
+
+            if (neurons is not None) and (len(neurons) > 0):
+                ffn_modules = []
+                first_layer = nn.LazyLinear(neurons[0], bias=True)
+                ffn_modules.append(first_layer)
+                ffn_modules.append(nn.PReLU())
+
+                for i in range(len(neurons) - 1):
+                    ffn_modules.append(nn.LazyLinear(neurons[i], neurons[i + 1]))
+                    ffn_modules.append(nn.PReLU())
+
+                self.ffn = nn.Sequential(*ffn_modules)
+                self.classifier = nn.LazyLinear(neurons[-1], num_classes)
+            else:
+                self.ffn = None
+                self.classifier = nn.LazyLinear(num_classes, bias=True)
+
+            self.softmax = nn.Softmax(dim=1)
+
+        def forward(self, x):
+            x = self.cnn1(x)
+            x = self.bn1(x)
+            x = self.prelu1(x)
+            x = self.drop1(x)
+            x = self.pool1(x)
+
+            x = self.cnn2(x)
+            x = self.bn2(x)
+            x = self.prelu2(x)
+            x = self.drop2(x)
+            x = self.pool2(x)
+
+            x = self.flatten(x)
+
+            if self.ffn is not None:
+                x = self.ffn(x)
+            x = self.classifier(x)
+            x = self.softmax(x)
+            return x
+
+    model = FinetuneBaseModel(num_classes, filters, neurons, dropout, kernel_size, pool_size)
     return model
 
-    '''
-    Loads the pretrained model based on previous parameters.
-    Args: 
-        path (str): Path to the pretrained model weights.
-        prev_params (list): List of previous model parameters.
-    Returns: The new pretrained model with loaded weights
-    '''
-    
+
+def create_finetune(model, num_classes=4):
+    """
+    Purpose:
+        Generate a new finetune model from the pretrained base model.
+        Creating a deep copy of the base_model so that the newly created
+        finetune_model can be modified without altering the original base_model.
+
+    Args:
+        model (nn.Module): The pretrained finetune-base model.
+        num_classes (int, optional): Number of gestures/classes for the new model. Defaults to 4.
+
+    Returns:
+        new_model (nn.Module): The new finetune model.
+    """
+    new_model = copy.deepcopy(model)
+    if hasattr(new_model, "classifier"):
+        old_in = new_model.classifier.in_features
+        new_model.classifier = nn.LazyLinear(old_in, num_classes)
+    new_model.softmax = nn.Softmax(dim=1)
+    return new_model
 
 
 def get_pretrained(path, prev_params):
+    """
+    Purpose:
+        Load a pretrained finetune-base model given its checkpoint path.
+        prev_params structure:
+        prev_params[0] ⇒ num_classes
+        prev_params[1] ⇒ filters ([32, 64])
+        prev_params[2] ⇒ neurons ([512, 128] or None)
+        prev_params[3] ⇒ dropout (0.5)
+        prev_params[4] ⇒ kernel_size (5, 3))
+        prev_params[5] ⇒ input_shape ((52, 8, 1))
+        prev_params[6] ⇒ pool_size ((3, 1))
+
+    Args:
+        path (str): Path of pretrained weights of the finetune-base model.
+        prev_params (list): Parameter specification of the pretrained finetune-base model.
+
+    Returns:
+        base_model (nn.Module): A PyTorch model loaded with the weights from 'path'.
+    """
     base_model = get_model(
-        num_classes=prev_params[0],  # 4
-        filters=prev_params[1],      # [32, 64]
-        neurons=prev_params[2],      # [512, 128]
-        dropout=prev_params[3],      # 0.5
+        num_classes=prev_params[0],
+        filters=prev_params[1],
+        neurons=prev_params[2],
+        dropout=prev_params[3],
         kernel_size=prev_params[4],
         input_shape=prev_params[5],
-        pool_size=prev_params[6]
+        pool_size=prev_params[6],
     )
-    logger.info(f"Loading Pretrained Model {path}")
-    # Load pretrained weights
-    base_model.load_state_dict(torch.load(path))
-    logger.info("Pretrained Model Loaded")
+    base_model.load_state_dict(torch.load(path, map_location="gpu"))
     return base_model
 
-def create_finetune(base_model, num_classes=4):
-    # Build the new model with the given number of classes
-    finetune_model = Model(
-        num_classes=num_classes,
-        filters=base_model.filters,
-        neurons=base_model.neurons,
-        dropout=base_model.dropout,
-        kernel_size=base_model.kernel_size,
-        input_shape=base_model.input_shape,
-        pool_size=base_model.pool_size
+
+def get_finetune(path, prev_params, lr=0.2, num_classes=4):
+    """
+    Purpose:
+        Load a pretrained finetune model given its checkpoint path.
+        prev_params structure:
+        prev_params[0] ⇒ num_classes
+        prev_params[1] ⇒ filters ([32, 64])
+        prev_params[2] ⇒ neurons ([512, 128] or None)
+        prev_params[3] ⇒ dropout (0.5)
+        prev_params[4] ⇒ kernel_size (5, 3))
+        prev_params[5] ⇒ input_shape ((52, 8, 1))
+        prev_params[6] ⇒ pool_size ((3, 1))
+
+    Args:
+        path (str): Path of pretrained weights of the finetune model.
+        prev_params (list): Parameter specification of the pretrained finetune model
+        num_classes (int, optional): Number of gestures/classes for the new model. Defaults to 4.
+
+    Returns:
+        finetune_model (nn.Module): A PyTorch model loaded with the weights from 'path'.
+    """
+    base_model = get_model(
+        num_classes=prev_params[0],
+        filters=prev_params[1],
+        neurons=prev_params[2],
+        dropout=prev_params[3],
+        kernel_size=prev_params[4],
+        input_shape=prev_params[5],
+        pool_size=prev_params[6],
     )
-
-    # Copy parameters from the base model for all layers except the last one
-    finetune_model.load_state_dict(base_model.state_dict(), strict=False)
-
-    # Freeze the base model parameters
-    for param in finetune_model.parameters():
-        param.requires_grad = False
-
-    # Unfreeze the last fully connected layer
-    for param in finetune_model.fc3.parameters():
-        param.requires_grad = True
-
+    base_model.load_state_dict(torch.load(path, map_location="gpu"))
+    finetune_model = create_finetune(base_model, num_classes=num_classes)
     return finetune_model
 
+
 def train_model(
-    model, 
-    train_loader,
-    val_loader,
-    optimizer,
-    criterion,
+    model,
+    X_train,
+    y_train,
+    X_test,
+    y_test,
+    batch_size,
     save_path=None,
-    epochs=500,
-    patience=80,
-    step_size=50, #for StepLR
-    gamma=0.1,  #decay_rate
-    #lr=0.,    #0.2
-    # decay_rate=0.9,
-    device='cuda'
+    epochs=200,
+    patience=50,
+    lr=0.2,
+    decay_rate=0.9,
 ):
-    '''Trains model with early stopping and learning rate scheduling.
+    """
+    Purpose:
+        Train the finetune-base model.
+
     Args:
-        model (nn.Module): Model to train
-        train_loader (DataLoader): Training data loader
-        val_loader (DataLoader): Validation data loader
-        optimizer (Optimizer): Optimizer for training
-        criterion (Loss): Loss function
-        save_path (str): Path to save the model
-        epochs (int): Number of epochs
-        patience (int): Number of epochs without improvement
-        lr (float): Initial learning rate
-        decay_rate (float): Learning rate decay rate
-        device (str, optional): Device to run the model on (cpu or cuda)'''
-    best_loss = float('inf')
-    best_accuarcy = 0.0
-    patience_counter = 0
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, step_size=step_size, gamma=gamma)
-    #scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.1, patience=10, verbose=True)
+        model (nn.Module): The finetune-base model to train.
+        X_train (numpy.ndarray): The training input. Shape: [n_samples, 1, 8, 52].
+        y_train (numpy.ndarray): The training target/label.
+        X_test (numpy.ndarray): The testing input. Shape: [n_samples, 1, 8, 52].
+        y_test (numpy.ndarray): The testing target/label.
+        batch_size (int): Batch_size for training.
+        save_path (str): Path to save the model's weights. Ends with '.pth' or '.ckpt'.
+        epochs (int, optional): Number of training epochs. Defaults to 200.
+        patience (int, optional): Number of epochs without improvement for early stopping. Defaults to 50. 80?
+        lr (float, optional): Initial learning rate. Defaults to 0.2.
+        decay_rate (float, optional): Exponential decay rate for LR. Defaults to 0.9.
+
+    Returns:
+        history (dict): A dictionary containing training and validation logs.
+    """
+    X_train = torch.tensor(X_train, dtype=torch.float32)
+    y_train = torch.tensor(y_train, dtype=torch.long)
+    X_test = torch.tensor(X_test, dtype=torch.float32)
+    y_test = torch.tensor(y_test, dtype=torch.long)
+
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model.to(device)
-    
-    training_losses = []
-    validation_losses = []
-    training_accuracies = []
-    validation_accuracies = []
-    
+
+    train_dataset = torch.utils.data.TensorDataset(X_train, y_train)
+    test_dataset = torch.utils.data.TensorDataset(X_test, y_test)
+
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
+
+    optimizer = optim.Adam(model.parameters(), lr=lr)
+    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=decay_rate)
+    criterion = nn.CrossEntropyLoss()
+
+    best_val_loss = float("inf")
+    patience_counter = 0
+
+    history = {
+        "train_loss": [],
+        "val_loss": [],
+        "train_acc": [],
+        "val_acc": [],
+    }
+
     for epoch in range(epochs):
         model.train()
         running_loss = 0.0
         correct = 0
         total = 0
-        for inputs, labels in train_loader:
-            inputs = inputs.to(device).float()
-            labels = labels.to(device).long()
-            optimizer.zero_grad()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            loss.backward()
-            # Gradient clipping to prevent exploding gradients
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1)
-            optimizer.step()
-            running_loss += loss.item() * inputs.size(0)
-            
-            # Calculate training accuracy
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-        # scheduler.step()
-        train_loss = running_loss / len(train_loader.dataset)
-        training_accuracies.append(100 * correct / total)
-        training_losses.append(train_loss)
-        training_accuracies.append(training_accuracies)
-        
-    '''validation loss'''
-    model.eval()
-    val_loss = 0.0
-    correct = 0
-    total = 0
-    with torch.no_grad():
-        for inputs, labels in val_loader:
-            inputs = inputs.to(device).float()
-            labels = labels.to(device).long()
-            outputs = model(inputs)
-            loss = criterion(outputs, labels)
-            val_loss += loss.item() * inputs.size(0)
-            
-            # Calculate validation accuracy
-            _, predicted = torch.max(outputs.data, 1)
-            total += labels.size(0)
-            correct += (predicted == labels).sum().item()
-            
-    val_loss /= len(val_loader.dataset)
-    validation_losses.append(val_loss)
-    validation_accuracies.append(100 * correct / total)
-    validation_losses.append(val_loss)
-    validation_accuracies.append(validation_accuracies)
-    logger.info(f"Epoch {epoch+1}/{epochs} - Running Loss: {train_loss:.4f} - Train Acc: {training_accuracies:.4f} - Validation Loss: {val_loss:.4f} - Validation Acc: {validation_accuracies:.4f}")
-    
-    '''check for improvement'''
-    #early stopping, saving best model
-    if val_loss < best_loss and validation_accuracies > best_accuarcy:
-        best_loss = val_loss
-        best_accuarcy = validation_accuracies
-        patience_counter = 0
-        if save_path:
-            torch.save(model.state_dict(), save_path)
-            logger.info(f"Model saved to {save_path}")
-            
-    else:
-        patience_counter += 1
-        if patience_counter >= patience:
-            logger.info(f"Early stopping triggered at epoch {epoch+1}")
-            #return model
-            
-            
-        '''step scheduling'''
-        scheduler.step()  #scheduler.step(val_loss)
-    return model, training_losses, validation_losses, training_accuracies, validation_accuracies
 
-def plot_logs(training_losses, validation_losses, training_accuracies, validation_accuracies, acc=False, save_path=None):
-    '''Plots the training and validation logs.
+        for batch_x, batch_y in train_loader:
+            batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+            optimizer.zero_grad()
+            outputs = model(batch_x)
+            loss = criterion(outputs, batch_y)
+            loss.backward()
+            optimizer.step()
+
+            running_loss += loss.item() * batch_x.size(0)
+            _, predicted = torch.max(outputs, 1)
+            correct += (predicted == batch_y).sum().item()
+            total += batch_y.size(0)
+
+        scheduler.step()
+
+        train_loss = running_loss / total
+        train_acc = correct / total
+
+        model.eval()
+        val_loss = 0.0
+        val_correct = 0
+        val_total = 0
+        with torch.no_grad():
+            for batch_x, batch_y in test_loader:
+                batch_x, batch_y = batch_x.to(device), batch_y.to(device)
+                outputs = model(batch_x)
+                loss = criterion(outputs, batch_y)
+
+                val_loss += loss.item() * batch_x.size(0)
+                _, predicted = torch.max(outputs, 1)
+                val_correct += (predicted == batch_y).sum().item()
+                val_total += batch_x.size(0)
+
+        val_loss /= val_total
+        val_acc = val_correct / val_total
+
+        history["train_loss"].append(train_loss)
+        history["val_loss"].append(val_loss)
+        history["train_acc"].append(train_acc)
+        history["val_acc"].append(val_acc)
+
+        print(
+            f"Epoch {epoch+1}/{epochs} | Train Loss: {train_loss:.4f}"
+            f" | Train Acc: {train_acc:.4f} | Val Loss: {val_loss:.4f}"
+            f" | Val Acc: {val_acc:.4f}"
+        )
+
+        if val_loss < best_val_loss:
+            best_val_loss = val_loss
+            patience_counter = 0
+            if save_path is not None:
+                torch.save(model.state_dict(), save_path)
+                print(f"Saved best model to {save_path}")
+        else:
+            patience_counter += 1
+            if patience_counter >= patience:
+                print(f"Early stopping at epoch {epoch + 1}")
+                break
+
+    return history
+
+
+def plot_logs(history, acc=True, save_path=None):
+    """
+    Purpose:
+        Plot loss and accuracy logs from model training.
+
     Args:
-        training_losses (list): Training losses
-        validation_losses (list): Validation losses
-        acc (bool, optional): Whether to plot accuracy. Defaults to False
-        save_path (str, optional): Path to save the plot'''
-    plt.figure(figsize=(10, 6))
+        history (dict): The loss and accuracy log output from model training with
+                        keys: ['loss', 'val_loss', 'accuracy', 'val_accuracy'].
+        acc (bool, optional): Whether to plot training accuracy logs. Defaults to True.
+        save_path (str, optional): Path to save plot. Should end with '.jpg'. Defaults to None.
+    """
     if acc:
-        plt.title('Model Accuracy')
-        plt.plot(training_losses, label='Training Accuracy')
-        plt.plot(validation_losses, label='Validation Accuracy')
-        plt.ylabel('Accuracy')
+        params = {"acuracy", "val_accuracy", "model accuracy", "accuracy"}
     else:
-        plt.title('Model Loss')
-        plt.plot(training_losses, label='Training Loss')
-        plt.plot(validation_losses, label='Validation Loss')
-        plt.ylabel('Loss')
-    plt.xlabel('Epoch')
-    plt.legend()
-    if save_path:
+        params = {"loss", "val_loss", "model loss", "loss"}
+
+    plt.figure(figsize=(20, 6))
+    plt.plot(history[params[0]], label="Train")
+    plt.plot(history[params[1]], label="Validation")
+    plt.title(params[2])
+    plt.ylabel(params[3])
+    plt.xlabel("Epoch")
+    plt.legend(loc="upper left")
+
+    if save_path is not None:
         plt.savefig(save_path)
     plt.show()
-    
-    '''Reltime prediction using pretrained model
+
+
+def realtime_pred(model, sEMG, num_channels=8, window_length=32):
+    """
+    Purpose:
+        Perform realtime predictions with the finetuned model.
+
     Args:
-        model (nn.Module): Model to use for prediction
-        sEMG (np.ndarray): sEMG data
-        num_channels (int, optional): Number of channels. Defaults to 8
-        window_length (int, optional): Window length. Defaults to 32 
-        52 is used for now to allow enough spatial dimensions for the CNN
-        device (str, optional): Device to run the model on. Defaults to 'gpu'
-        Returns:
-        int: Predicted gesture index'''
-        
-def realtime_pred(model, sEMG, num_channels=8, window_length=52, device='gpu'):
-    sEMG = np.array(sEMG).reshape(-1, num_channels, window_length)
-    sEMG = torch.from_numpy(sEMG).unsqueeze(1).float()
-    sEMG = sEMG.to(device)
-    
+        model (nn.Module): The finetuned model.
+        sEMG (numpy.ndarray): The realtime sEMG samples to input.
+        num_channels (int, optional): Number of sensors/channels. Defaults to 8.
+        window_length (int, optional): Samples included per sensor/channel. Defaults to 32.
+
+    Returns:
+        int: The model prediction index.
+    """
+    sEMG = np.array(sEMG).reshape(-1, 1, num_channels, window_length)
+    device = next(model.parameters()).device
+    sEMG_t = torch.tensor(sEMG, dtype=torch.float32, device=device)
+
     model.eval()
-    
     with torch.no_grad():
-        output = model(sEMG)
-        _, preds = torch.max(output, 1)
-    return preds.item()
+        pred = model(sEMG_t)
+        pred_idx = torch.argmax(pred, dim=1).item()
 
-def create_dataloaders(X_train, y_train, X_val, y_val, batch_size):
-    '''Creates training and validation data loaders.
-    Args:
-        X_train (np.ndarray): Training data
-        y_train (np.ndarray): Training labels
-        X_val (np.ndarray): Validation data
-        y_val (np.ndarray): Validation labels
-        batch_size (int): Batch size
-        Returns:
-        train_loader (torch.utils.data.DataLoader):
-            Training data loader'''
-    X_train_tensor = torch.from_numpy(X_train).float()
-    y_train_tensor = torch.from_numpy(y_train).long()
-    X_val_tensor = torch.from_numpy(X_val).float()
-    y_val_tensor = torch.from_numpy(y_val).long()
-
-    training_dataset = TensorDataset(X_train_tensor, y_train_tensor)
-    validation_dataset = TensorDataset(X_val_tensor, y_val_tensor)
-    
-    train_loader = DataLoader(training_dataset, batch_size=batch_size, shuffle=True)
-    val_loader = DataLoader(validation_dataset, batch_size=batch_size, shuffle=False)
-    
-    return train_loader, val_loader
-  
+    return pred_idx
