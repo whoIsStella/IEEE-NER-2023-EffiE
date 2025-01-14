@@ -251,8 +251,8 @@ def train_model(
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=decay_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    # scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=decay_rate)
     criterion = nn.CrossEntropyLoss()
 
     best_val_loss = float("inf")
@@ -284,7 +284,7 @@ def train_model(
             correct += (predicted == batch_y).sum().item()
             total += batch_y.size(0)
 
-        scheduler.step()
+        # scheduler.step()
 
         train_loss = running_loss / total
         train_acc = correct / total
