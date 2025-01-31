@@ -165,9 +165,10 @@ def get_pretrained(path, prev_params):
         input_shape=prev_params[5],
         pool_size=prev_params[6],
     )
-    base_model.load_state_dict(torch.load(path, map_location="gpu"))
-    return base_model
-
+    # base_model.load_state_dict(torch.load(path, map_location="gpu"))
+    # return base_model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    base_model.load_state_dict(torch.load(path, map_location=device))
 
 def get_finetune(path, prev_params, lr=0.2, num_classes=4):
     """
@@ -199,7 +200,7 @@ def get_finetune(path, prev_params, lr=0.2, num_classes=4):
         input_shape=prev_params[5],
         pool_size=prev_params[6],
     )
-    base_model.load_state_dict(torch.load(path, map_location="gpu"))
+    base_model.load_state_dict(torch.load(path, map_location=('cpu')))
     finetune_model = create_finetune(base_model, num_classes=num_classes)
     return finetune_model
 
@@ -251,8 +252,8 @@ def train_model(
     train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
     test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=False)
 
-    optimizer = optim.Adam(model.parameters(), lr=lr)
-    scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=decay_rate)
+    optimizer = torch.optim.SGD(model.parameters(), lr=lr)
+    # scheduler = optim.lr_scheduler.ExponentialLR(optimizer, gamma=decay_rate)
     criterion = nn.CrossEntropyLoss()
 
     best_val_loss = float("inf")
@@ -284,7 +285,7 @@ def train_model(
             correct += (predicted == batch_y).sum().item()
             total += batch_y.size(0)
 
-        scheduler.step()
+        # scheduler.step()
 
         train_loss = running_loss / total
         train_acc = correct / total
