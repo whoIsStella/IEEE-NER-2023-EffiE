@@ -165,9 +165,10 @@ def get_pretrained(path, prev_params):
         input_shape=prev_params[5],
         pool_size=prev_params[6],
     )
-    base_model.load_state_dict(torch.load(path, map_location="gpu"))
-    return base_model
-
+    # base_model.load_state_dict(torch.load(path, map_location="gpu"))
+    # return base_model
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    base_model.load_state_dict(torch.load(path, map_location=device))
 
 def get_finetune(path, prev_params, lr=0.2, num_classes=4):
     """
@@ -199,7 +200,7 @@ def get_finetune(path, prev_params, lr=0.2, num_classes=4):
         input_shape=prev_params[5],
         pool_size=prev_params[6],
     )
-    base_model.load_state_dict(torch.load(path, map_location="gpu"))
+    base_model.load_state_dict(torch.load(path, map_location=('cpu')))
     finetune_model = create_finetune(base_model, num_classes=num_classes)
     return finetune_model
 
