@@ -44,6 +44,11 @@ To run realtime gesture recognition, follow the "Real Time Gesture Recognition" 
 ## Tensorflow Lite (optional)
 Have the finetuned model's weights stored in folder `finetuned`, and run `tensorflow_lite.py`. Then, you will see the optimized TF-Lite model in folder `tensorflow_lite`.
 
+## Security and dependency updates
+- Dependencies in `requirements.txt` were updated to address known security advisories.
+- A weekly Dependabot configuration was added at `.github/dependabot.yml` for both `pip` and GitHub Actions.
+- If additional alerts appear under **Security and Quality**, update the pinned version in `requirements.txt` and re-run a dependency audit before merging.
+
 ## Files Overview
 1. Folder -> "checkpoints" contains:
     - A pretrained finetune-base model's weights.
